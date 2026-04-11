@@ -4,7 +4,7 @@ import { Search, Filter } from 'lucide-react';
 const ChatPage = () => {
   // Demo data for visual testing
   const chats = [
-    { id: 1, name: "Forhad Miah", lastMsg: "Project update ta pathan", time: "10:30 AM" },
+    { id: 1, name: "Fainaz", lastMsg: "Project update ta pathan", time: "10:30 AM" },
     { id: 2, name: "AI Interviewer", lastMsg: "Ready for the mock test?", time: "Yesterday" },
     { id: 3, name: "Dev Team", lastMsg: "Socket.io issue fixed", time: "9:15 AM" },
   ];
@@ -53,7 +53,7 @@ const ChatPage = () => {
       {/* Placeholder for Message Window */}
       <div className="hidden md:flex flex-1 items-center justify-center bg-[#222e35]">
         <div className="text-center">
-          <h2 className="text-[#e9edef] text-2xl font-light">WhatsApp for Interviews</h2>
+          <h2 className="text-[#e9edef] text-2xl font-light">DevChat for Interviews</h2>
           <p className="text-[#8696a0] text-sm mt-2">Send and receive messages without keeping your phone online.</p>
         </div>
       </div>

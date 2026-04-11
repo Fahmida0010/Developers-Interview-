@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/src/components/Navbar";
-
+import { Providers } from "@/src/components/Providers";
 
 export const metadata: Metadata = {
   title: "DevChat | Interview App",
@@ -10,19 +10,21 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="bg-[#111b21] text-white flex h-screen overflow-hidden">
-        {/* Sidebar/Navbar */}
-        <Navbar/>
         
-        {/* Main Content Area */}
-        <main className="flex-1 flex flex-col relative overflow-hidden">
-          {children}
-        </main>
+        <Providers>
+          <Navbar />
+
+          <main className="flex-1 flex flex-col relative overflow-hidden">
+            {children}
+          </main>
+        </Providers>
+
       </body>
     </html>
   );
