@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/src/components/Navbar";
 import { Providers } from "@/src/components/Providers";
+// import LoginPage from "./(auth)/login/page";
 
 export const metadata: Metadata = {
   title: "DevChat | Interview App",
@@ -22,6 +23,7 @@ export default function RootLayout({
 
           <main className="flex-1 flex flex-col relative overflow-hidden">
             {children}
+        
           </main>
         </Providers>
 

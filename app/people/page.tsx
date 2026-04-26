@@ -15,8 +15,9 @@ interface User {
 interface FriendRequest {
   id: string;
   user_id: string;
+  friend_id: string;
   status: string;
-  sender_info: User;
+  sender_info?: User;
 }
 
 export default function PeoplePage() {
@@ -34,53 +35,65 @@ export default function PeoplePage() {
 
   const fetchData = async () => {
     setLoading(true);
-    
-    // 1. Fetch all users
-    const { data: allUsers, error: userError } = await supabase.from("users").select("*");
-    
-    // 2. Fetch my sent requests to disable "Add Friend" button
+
+    const myId = session?.user?.id;
+
+    // 🔹 All users
+    const { data: allUsers } = await supabase.from("users").select("*");
+
+    // 🔹 Sent requests
     const { data: sentReqs } = await supabase
       .from("friends")
       .select("friend_id")
-      .eq("user_id", session?.user?.id);
+      .eq("user_id", myId);
 
-    // 3. Fetch incoming pending requests
+    // 🔹 Incoming requests
     const { data: incoming } = await supabase
       .from("friends")
-      .select(`id, user_id, status, users!friends_user_id_fkey(id, name, email, image)`)
-      .eq("friend_id", session?.user?.id)
+      .select("*")
+      .eq("friend_id", myId)
       .eq("status", "pending");
 
-    if (allUsers) {
-      const filtered = allUsers.filter((u: User) => u.email !== session?.user?.email);
-      setUsers(filtered);
-    }
+    // 🔥 format incoming with sender info
+    let formattedIncoming: FriendRequest[] = [];
 
-    if (sentReqs) {
-      setRequested(sentReqs.map(r => r.friend_id));
-    }
+    if (incoming && incoming.length > 0) {
+      const senderIds = incoming.map((i) => i.user_id);
 
-    if (incoming) {
-      const formattedIncoming = incoming.map((item: any) => ({
-        id: item.id,
-        user_id: item.user_id,
-        status: item.status,
-        sender_info: item.users
+      const { data: senders } = await supabase
+        .from("users")
+        .select("*")
+        .in("id", senderIds);
+
+      formattedIncoming = incoming.map((req: any) => ({
+        ...req,
+        sender_info: senders?.find((u) => u.id === req.user_id),
       }));
-      setIncomingRequests(formattedIncoming);
     }
+
+    // 🔹 Filter users (exclude self)
+    if (allUsers && myId) {
+      setUsers(allUsers.filter((u) => String(u.id) !== String(myId)));
+    }
+
+    // 🔹 Requested list
+    const sentList = sentReqs?.map((r) => r.friend_id) || [];
+    const incomingIds = incoming?.map((r) => r.user_id) || [];
+
+    setRequested([...sentList, ...incomingIds]);
+    setIncomingRequests(formattedIncoming);
 
     setLoading(false);
   };
 
+  // 🔥 Send Friend Request
   const handleAddFriend = async (friendId: string) => {
-    if (!session?.user?.id) {
-      Swal.fire("Error", "User not logged in", "error");
-      return;
-    }
-
     const { error } = await supabase.from("friends").insert([
-      { user_id: session.user.id, friend_id: friendId, status: "pending" },
+      {
+        user_id: session?.user?.id,
+        friend_id: friendId,
+        status: "pending",
+      },
     ]);
 
     if (error) {
@@ -89,37 +102,87 @@ export default function PeoplePage() {
     }
 
     setRequested((prev) => [...prev, friendId]);
-    Swal.fire({ icon: "success", title: "Request Sent!", timer: 2000, showConfirmButton: false });
+
+    Swal.fire("Success", "Request Sent!", "success");
   };
 
-  const handleRequestAction = async (requestId: string, status: 'accepted' | 'rejected') => {
+  // 🔥 Accept / Reject
+  const handleRequestAction = async (
+    request: FriendRequest,
+    status: "accepted" | "rejected"
+  ) => {
     const { error } = await supabase
       .from("friends")
       .update({ status })
-      .eq("id", requestId);
+      .eq("id", request.id);
 
-    if (!error) {
-      setIncomingRequests(prev => prev.filter(req => req.id !== requestId));
-      Swal.fire("Success", `Request ${status}`, "success");
+    if (error) {
+      Swal.fire("Error", error.message, "error");
+      return;
     }
+
+    // 🔥 create conversation if accepted
+    if (status === "accepted") {
+      await supabase.from("conversations").insert({
+        user1_id: request.user_id,
+        user2_id: request.friend_id,
+      });
+    }
+
+    setIncomingRequests((prev) =>
+      prev.filter((r) => r.id !== request.id)
+    );
+
+    Swal.fire("Success", `Request ${status}`, "success");
   };
 
   return (
     <div className="min-h-screen bg-[#111b21] text-white p-4 sm:p-6">
-      
-      {/* Pending Requests Section */}
+
+      {/* 🔥 Incoming Requests */}
       {incomingRequests.length > 0 && (
         <div className="mb-10">
-          <h2 className="text-xl font-bold mb-4 text-[#00a884]">Friend Requests</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <h2 className="text-xl font-bold mb-4 text-[#00a884]">
+            Friend Requests
+          </h2>
+
+          <div className="grid gap-4">
             {incomingRequests.map((req) => (
-              <div key={req.id} className="bg-[#202c33] p-4 rounded-xl flex items-center gap-4 border border-[#00a884]/30">
-                <img src={req.sender_info.image || "/avatar.png"} className="w-12 h-12 rounded-full object-cover" alt="user" />
+              <div
+                key={req.id}
+                className="bg-[#202c33] p-4 rounded-xl flex items-center gap-4"
+              >
+                <img
+                  src={req.sender_info?.image || "/avatar.png"}
+                  className="w-14 h-14 rounded-full"
+                />
+
                 <div className="flex-1">
-                  <h3 className="font-medium">{req.sender_info.name || req.sender_info.email}</h3>
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => handleRequestAction(req.id, 'accepted')} className="bg-[#00a884] text-xs px-3 py-1 rounded">Accept</button>
-                    <button onClick={() => handleRequestAction(req.id, 'rejected')} className="bg-red-500 text-xs px-3 py-1 rounded">Reject</button>
+                  <h3 className="font-semibold">
+                    {req.sender_info?.name || "Unknown"}
+                  </h3>
+                  <p className="text-sm text-gray-400">
+                    {req.sender_info?.email}
+                  </p>
+
+                  <div className="flex gap-3 mt-3">
+                    <button
+                      onClick={() =>
+                        handleRequestAction(req, "accepted")
+                      }
+                      className="bg-green-500 px-4 py-1 rounded"
+                    >
+                      Confirm
+                    </button>
+
+                    <button
+                      onClick={() =>
+                        handleRequestAction(req, "rejected")
+                      }
+                      className="bg-red-500 px-4 py-1 rounded"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 </div>
               </div>
@@ -128,32 +191,44 @@ export default function PeoplePage() {
         </div>
       )}
 
+      {/* 🔹 Users */}
       <h1 className="text-2xl font-bold mb-6">Suggestions</h1>
 
       {loading ? (
         <p className="text-gray-400">Loading...</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid gap-4">
           {users.map((user) => {
             const isRequested = requested.includes(user.id);
+
             return (
-              <div key={user.id} className="bg-[#202c33] p-4 rounded-xl flex flex-col sm:flex-row sm:items-center gap-4 shadow-md">
-                <img src={user.image || "/avatar.png"} className="w-12 h-12 rounded-full object-cover" alt="user" />
+              <div
+                key={user.id}
+                className="bg-[#202c33] p-4 rounded-xl flex items-center gap-4"
+              >
+                <img
+                  src={user.image || "/avatar.png"}
+                  className="w-12 h-12 rounded-full"
+                />
+
                 <div className="flex-1">
-                  <h3 className="font-medium">{user.name || user.email}</h3>
-                  <p className="text-sm text-gray-400 break-all">{user.email}</p>
+                  <h3>{user.name || "No Name"}</h3>
+                  <p className="text-sm text-gray-400">
+                    {user.email}
+                  </p>
                 </div>
-                <div className="flex sm:flex-col gap-2 sm:ml-auto w-full sm:w-auto">
-                  <button
-                    onClick={() => handleAddFriend(user.id)}
-                    disabled={isRequested}
-                    className={`px-3 py-1 rounded text-sm transition w-full sm:w-auto ${
-                      isRequested ? "bg-gray-600 cursor-not-allowed" : "bg-[#00a884] hover:bg-[#06cf9c]"
-                    }`}
-                  >
-                    {isRequested ? "Requested" : "Add Friend"}
-                  </button>
-                </div>
+
+                <button
+                  onClick={() => handleAddFriend(user.id)}
+                  disabled={isRequested}
+                  className={`px-3 py-1 rounded text-sm ${
+                    isRequested
+                      ? "bg-gray-600"
+                      : "bg-[#00a884] hover:bg-[#06cf9c]"
+                  }`}
+                >
+                  {isRequested ? "Requested" : "Add Friend"}
+                </button>
               </div>
             );
           })}
