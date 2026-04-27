@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // ⚠️ server only
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // server only
 );
 
 export async function POST(req: Request) {
@@ -11,20 +11,25 @@ export async function POST(req: Request) {
     const formData = await req.formData();
 
     const name = formData.get("name") as string;
-    const image = formData.get("image") as File;
+    const email = formData.get("email") as string; // ✅ dynamic email
+    const image = formData.get("image") as File | null;
 
-    let imageUrl = "";
+    if (!email) {
+      return NextResponse.json({ error: "Email is required" });
+    }
 
-    // 📸 image upload to supabase storage
-    if (image) {
+    let imageUrl: string | null = null;
+
+    // 📸 Upload Image (if exists)
+    if (image && image.size > 0) {
       const fileName = `${Date.now()}-${image.name}`;
 
-      const { data, error } = await supabase.storage
-        .from("avatars") // 👉 bucket name
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
         .upload(fileName, image);
 
-      if (error) {
-        return NextResponse.json({ error: error.message });
+      if (uploadError) {
+        return NextResponse.json({ error: uploadError.message });
       }
 
       const { data: publicUrl } = supabase.storage
@@ -34,21 +39,36 @@ export async function POST(req: Request) {
       imageUrl = publicUrl.publicUrl;
     }
 
-    // 🔥 user update (table name: users)
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({
-        name: name,
-        image: imageUrl,
-      })
-      .eq("email", "YOUR_USER_EMAIL"); // ⚠️ important
+    // 🧠 Dynamic update object (avoid overwriting)
+    const updateData: any = {};
 
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message });
+    if (name) updateData.name = name;
+    if (imageUrl) updateData.image = imageUrl;
+
+    // ❗ nothing to update
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: "No data to update" });
+    }
+
+    // 🔥 Update user
+    const { data, error } = await supabase
+      .from("users")
+      .update(updateData)
+      .eq("email", email)
+      .select();
+
+    if (error) {
+      return NextResponse.json({ error: error.message });
+    }
+
+    // user not found
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "User not found" });
     }
 
     return NextResponse.json({
       message: "Profile updated successfully",
+      data,
     });
   } catch (err) {
     return NextResponse.json({
