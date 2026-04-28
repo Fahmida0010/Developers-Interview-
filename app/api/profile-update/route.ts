@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       imageUrl = publicUrl.publicUrl;
     }
 
-    // 🧠 Dynamic update object (avoid overwriting)
+    //  Dynamic update object (avoid overwriting)
     const updateData: any = {};
 
     if (name) updateData.name = name;
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No data to update" });
     }
 
-    // 🔥 Update user
+    //  Update user
     const { data, error } = await supabase
       .from("users")
       .update(updateData)
