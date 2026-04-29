@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { supabase } from "@/src/lib/supabase";
 import Swal from "sweetalert2";
 
+// I have to compplete this as soon as possible
 interface User {
   id: string;
   email: string;
